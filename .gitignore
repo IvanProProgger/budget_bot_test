@@ -1,0 +1,6 @@
+config/.env
+data/credentials.json
+.idea
+approvals.db
+logs/**/*.log
+**/__pycache__/
