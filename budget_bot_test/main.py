@@ -9,7 +9,7 @@ from telegram.ext import (
 
 from config.config import Config
 
-from budget_bot_test.conversation import (
+from budget_bot_test.conversation_handler import (
     enter_record,
     input_sum,
     input_item,

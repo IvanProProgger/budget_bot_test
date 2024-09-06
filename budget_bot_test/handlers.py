@@ -6,10 +6,10 @@ from google.api_core.exceptions import NotFound
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
+from budget_bot_test.sheets import add_record_to_google_sheet
 from config.config import Config
 from config.logging_config import logger
 from db import db
-from budget_bot_test.sheets import add_record_to_google_sheet
 
 
 async def chat_ids_department(department: str) -> list[int]:
@@ -55,6 +55,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
 
 
+
 async def submit_record_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Обработчик введённого пользователем платежа в соответствии с паттерном:
@@ -81,6 +82,7 @@ async def submit_record_command(update: Update, context: ContextTypes.DEFAULT_TY
         r"\s*((?:\d{2}\.\d{2}\s*){1,})\s*;\s*([^;]+)$"
     )
     message = " ".join(context.args)
+    logger.info(message)
     match = re.match(pattern, message)
     if not match:
         await context.bot.send_message(
@@ -131,6 +133,7 @@ async def submit_record_command(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         raise RuntimeError(f"Произошла ошибка при добавлении счёта в базу данных. {e}")
 
+    await update.message.reply_text("Счёт отправлен на подтверждение главе департамента")
     await create_and_send_approval_message(row_id, record_dict, "head", context=context)
 
 
@@ -162,11 +165,13 @@ async def create_and_send_approval_message(row_id: str | int, record_dict: dict,
     )
 
     chat_ids_list = await chat_ids_department(department)
-    await send_message_to_chats(chat_ids_list, message_text, context, row_id, department, reply_markup)
+    await send_message_and_save_data(context, chat_ids_list, message_text, row_id, department, reply_markup)
 
 
-async def send_message_to_chats(chat_ids_list: list[int], message_text: str, context: ContextTypes.DEFAULT_TYPE,
-                                row_id: int | str, department: str = None, reply_markup: InlineKeyboardMarkup = None):
+async def send_message_and_save_data(context: ContextTypes.DEFAULT_TYPE,
+                                     chat_ids_list: list[int], message_text: str,
+                                     row_id: int | str, department: str = None,
+                                     reply_markup: InlineKeyboardMarkup = None):
     """Отправка сообщения в выбранные телеграм-чаты."""
 
     message_ids = []
@@ -175,7 +180,8 @@ async def send_message_to_chats(chat_ids_list: list[int], message_text: str, con
             chat_id=chat_id, text=message_text, reply_markup=reply_markup
         )
         message_ids.append(message.message_id)
-    context.user_data[f"{row_id}_{department}"] = list(zip(chat_ids_list, message_ids))
+
+    context.bot_data[f"{row_id}_{department}"] = list(zip(chat_ids_list, message_ids))
 
 
 async def approval_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -236,18 +242,20 @@ async def approve_to_financial_dep(context: ContextTypes.DEFAULT_TYPE, update: U
             },
         )
         record = await db.get_row_by_id(row_id)
-
-    for chat_id, message_id in context.user_data[f"{row_id}_head"]:
-        try:
-            await context.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text="Запрос на одобрение отправлен в финансовый отдел.",
-                reply_markup=InlineKeyboardMarkup([]),
-            )
-        except Exception as e:
-            logger.error(f"Не удалось обновить сообщение об апруве счёта с chat_id: {chat_id}: {e}")
-    del context.user_data[f'{row_id}_head']
+    if context.bot_data.get(f'{row_id}_head'):
+        for chat_id, message_id in context.bot_data.get(f"{row_id}_head"):
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text="Запрос на одобрение отправлен в финансовый отдел.",
+                    reply_markup=InlineKeyboardMarkup([]),
+                )
+            except Exception as e:
+                logger.error(f"Не удалось обновить сообщение об апруве счёта с chat_id: {chat_id}: {e}")
+        del context.bot_data[f'{row_id}_head']
+    else:
+        await update.message.reply_text("Запрос на одобрение отправлен в финансовый отдел.")
     await create_and_send_approval_message(row_id, record, "finance", context=context)
 
 
@@ -270,17 +278,20 @@ async def approve_to_payment_dep(context: ContextTypes.DEFAULT_TYPE, update: Upd
             },
         )
         record = await db.get_row_by_id(row_id)
-    for chat_id, message_id in context.user_data[f'{row_id}_{department}']:
-        try:
-            await context.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text="Запрос на платеж одобрен. Счёт ожидает оплату.",
-                reply_markup=InlineKeyboardMarkup([]),
-            )
-        except Exception as e:
-            logger.error(f"Не удалось обновить сообщение об апруве счёта с chat_id: {chat_id} {e}")
-    del context.user_data[f'{row_id}_{department}']
+    if context.bot_data.get(f'{row_id}_{department}'):
+        for chat_id, message_id in context.bot_data.get(f"{row_id}_{department}"):
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text="Запрос на платеж одобрен. Счёт ожидает оплату.",
+                    reply_markup=InlineKeyboardMarkup([]),
+                )
+            except Exception as e:
+                logger.error(f"Не удалось обновить сообщение об апруве счёта с chat_id: {chat_id} {e}")
+        del context.bot_data[f'{row_id}_{department}']
+    else:
+        await update.message.reply_text("Запрос на платеж одобрен. Счёт ожидает оплату.")
     await create_and_send_payment_message(row_id, record, context)
 
 
@@ -292,18 +303,19 @@ async def reject_record(context: ContextTypes.DEFAULT_TYPE, update: Update,
         await db.update_row_by_id(
             row_id, {"status": "Rejected"}
         )
+    if context.bot_data.get(f'{row_id}_{department}'):
+        for chat_id, message_id in context.bot_data[f'{row_id}_{department}']:
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=f"Счёт №{row_id} отклонен.",
+                    reply_markup=InlineKeyboardMarkup([]),
+                )
+            except Exception as e:
+                logger.error(f"Не удалось обновить информацию об отклонении счёта с chat_id: {chat_id} {e}")
+        del context.bot_data[f'{row_id}_{department}']
 
-    for chat_id in context.user_data[f'{row_id}_{department}']:
-        try:
-            await context.bot.edit_message_text(
-                chat_id=chat_id,
-                text=f"Счёт №{row_id} отклонен.",
-                reply_markup=InlineKeyboardMarkup([]),
-            )
-        except Exception as e:
-            logger.error(f"Не удалось обновить информацию об отклонении счёта с chat_id: {chat_id} {e}")
-
-    del context.user_data[f'{row_id}_{department}']
     await context.bot.send_message(
         initiator_id, f"Счёт №{row_id} отклонен {approver}."
     )
@@ -327,7 +339,7 @@ async def create_and_send_payment_message(row_id: str, record: dict, context: Co
         f'{record["payment_method"]}, комментарий: {record["comment"]}'
     )
     chat_ids_list = await chat_ids_department("payers")
-    await send_message_to_chats(chat_ids_list, message_text, context, row_id, "payment", reply_markup)
+    await send_message_and_save_data(context, chat_ids_list, message_text, row_id, "payment", reply_markup)
 
 
 async def payment_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -353,31 +365,44 @@ async def make_payment_and_add_record_to_google_sheet(update: Update, context: C
             raise NotFound(f"Счёт №{row_id} не найден")
         await db.update_row_by_id(row_id, {"status": "Paid"})
 
-    for chat_id, message_id in context.user_data[f'{row_id}_payment']:
-        try:
-            await context.bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=f"Счёт №{row_id} оплачен.",
-                reply_markup=InlineKeyboardMarkup([])
-            )
-        except Exception as e:
-            logger.error(f"Не удалось обновить сообщение об оплате счёта с chat_id: {chat_id}: {e}")
-
+    if context.bot_data.get(f"{row_id}_payment"):
+        for chat_id, message_id in context.bot_data[f'{row_id}_payment']:
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=f"Счёт №{row_id} оплачен.",
+                    reply_markup=InlineKeyboardMarkup([])
+                )
+            except Exception as e:
+                logger.error(f"Не удалось обновить сообщение об оплате счёта с chat_id: {chat_id}: {e}")
+    del context.bot_data[f"{row_id}_payment"]
     # При нажатии "Оплачено" добавляем данные в таблицу
     await add_record_to_google_sheet(record)
 
 
 async def check_department(approver_id: int) -> str | None:
-    departments = {
+    """Возвращает название департамента, к которому принадлежит approver_id."""
+    departments = {  #  Если у approver_id возможен только 1 департамент
         **{k: "head" for k in Config.head_chat_ids},
         **{k: "finance" for k in Config.finance_chat_ids},
         **{k: "payers" for k in Config.payers_chat_ids}
     }
-    department = departments.get(approver_id)
-    if department not in ("head", "finance", "payers"):
+    user_department = departments.get(approver_id)
+    if user_department not in ("head", "finance", "payers"):
         return None
-    return department
+    return user_department
+
+    # departments = {}  #  Если пользователи могут состоять более чем в 1 департаменте
+    # for department in ["head", "finance", "payers"]:
+    #     for chat_id in getattr(Config, f"{department}_chat_ids"):
+    #         if chat_id not in departments:
+    #             departments[chat_id] = []
+    #         departments[chat_id].append(department)
+    # user_department = departments.get(approver_id)
+    # if not any(department in user_department for department in ("head", "finance", "payers")):
+    #     return None
+    # return user_department
 
 
 async def reject_record_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -388,23 +413,28 @@ async def reject_record_command(update: Update, context: ContextTypes.DEFAULT_TY
 
     row_id = context.args
     if not row_id:
-        raise ValueError("Пожалуйста, укажите id заявки!")
+        raise ValueError("Пожалуйста, укажите id счёта!")
     if len(row_id) > 1:
-        raise ValueError("Можно указать только 1 заявку!")
+        raise ValueError("Можно указать только 1 счёт!")
 
     approver_id = update.effective_chat.id
     department = await check_department(approver_id)
     if department not in ("head", "finance"):
-        raise PermissionError("Вы не можете менять статус заявок!")
+        raise PermissionError("Вы не можете менять статус счёта!")
 
     row_id = row_id[0]
     approver = f"@{update.effective_user.username}"
     async with db:
         record = await db.get_row_by_id(row_id)
+        status = record.get("status")
         initiator_id = record.get("initiator_id")
         if not record:
-            raise RuntimeError(f"Запись с id: {row_id} не найдена.")
-    await reject_record(context, update, row_id, approver, initiator_id)
+            raise RuntimeError(f"Счёт с id: {row_id} не найден.")
+
+    if status == "Approved" or status == "Rejected" or status == "Paid":
+        raise RuntimeError("Счёт уже обработан")
+
+    await reject_record(context, update, row_id, approver, initiator_id, department)
 
 
 async def approve_record_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -415,20 +445,34 @@ async def approve_record_command(update: Update, context: ContextTypes.DEFAULT_T
 
     row_id = context.args
     if not row_id:
-        raise ValueError("Пожалуйста, укажите id заявки!")
+        raise ValueError("Пожалуйста, укажите id счёта!")
     if len(row_id) > 1:
-        raise ValueError("Можно указать только 1 заявку!")
+        raise ValueError("Можно указать только 1 счёт!")
 
     row_id = row_id[0]
     async with db:
         record = await db.get_row_by_id(row_id)
         if not record:
-            raise RuntimeError(f"Запись с id: {row_id} не найдена.")
+            raise RuntimeError(f"Счёт с id: {row_id} не найдена.")
 
+    status = record.get("status")
+    if status == "Paid" or status == "Rejected":
+        raise RuntimeError("Счёт уже обработана")
+
+    if status == "Approved":
+        raise RuntimeError("Счёт уже подтвеждён!")
+    logger.info(status)
     approver_id = update.effective_chat.id
     department = await check_department(approver_id)
     if department not in ("head", "finance"):
-        raise PermissionError("Вы не можете менять статус заявок!")
+        raise PermissionError("Вы не можете менять статус счёта!")
+
+    if department == "head" and status == "Pending":
+        raise PermissionError('Вы уже одобрили счёт. '
+                              'Заявки в статусе "Pending" может одобрить только финансовый отдел')
+
+    if department == "finance" and status == "Not proccessed":
+        raise PermissionError('Необходимо одобрение главы департамента')
 
     action = "approve"
     approver = f"@{update.message.from_user.username}"
@@ -453,13 +497,37 @@ async def show_not_paid_command(update: Update, context: ContextTypes.DEFAULT_TY
         messages.append(wrapped_message)
 
     final_text = "\n\n".join(messages)
-
-    if final_text:
-        await update.message.reply_text(final_text)
-    else:
+    if not final_text:
         await update.message.reply_text("Заявок не обнаружено")
 
+    if len(final_text) >= 4096:  # Максимальная длина сообщения в Telegram
+        parts = split_long_message(final_text)
+        for part in parts:
+            await update.message.reply_text(part)
+    if final_text:
+        await update.message.reply_text(final_text)
+
     return
+
+
+def split_long_message(text: str) -> list[str]:
+    """Функция для разделения текста свыше 4096 символов"""
+    max_length = 4096
+    parts = []
+    current_part = ""
+
+    for line in text.split('\n'):
+        if len(current_part) + len(line) + 1 <= max_length:
+            current_part += (current_part and "\n") + line
+        else:
+            parts.append(current_part)
+            current_part = line
+
+    if current_part:
+        parts.append(current_part)
+
+    return parts
+
 
 import traceback
 
@@ -467,15 +535,13 @@ async def error_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """Обработчик ошибок для логирования и уведомления пользователя с детальной информацией об ошибке."""
 
     try:
-        error_text = str(context.error)
         error_traceback = traceback.format_exc()
-        message_text = f'{error_text}. {error_traceback}'
+        message_text = f'{str(context.error)}'
         await context.bot.send_message(update.effective_chat.id, message_text)
-        await context.bot.send_message(Config.developer_chat_id, message_text)
-        logger.error(f"{message_text}")
+        await context.bot.send_message(Config.developer_chat_id, f"{message_text} {error_traceback}")
+        logger.error(f"{message_text}\n{error_traceback}")
 
     except Exception as e:
         message_text = f"Ошибка при отправке уведомления об ошибке: {e}."
-
-        logger.error(message_text, error_traceback)
+        logger.error(message_text)
         await context.bot.send_message(Config.developer_chat_id, message_text)
