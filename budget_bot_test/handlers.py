@@ -82,7 +82,6 @@ async def submit_record_command(update: Update, context: ContextTypes.DEFAULT_TY
         r"\s*((?:\d{2}\.\d{2}\s*){1,})\s*;\s*([^;]+)$"
     )
     message = " ".join(context.args)
-    logger.info(message)
     match = re.match(pattern, message)
     if not match:
         await context.bot.send_message(
@@ -133,7 +132,6 @@ async def submit_record_command(update: Update, context: ContextTypes.DEFAULT_TY
     except Exception as e:
         raise RuntimeError(f"Произошла ошибка при добавлении счёта в базу данных. {e}")
 
-    await update.message.reply_text("Счёт отправлен на подтверждение главе департамента")
     await create_and_send_approval_message(row_id, record_dict, "head", context=context)
 
 
@@ -456,15 +454,12 @@ async def approve_record_command(update: Update, context: ContextTypes.DEFAULT_T
             raise RuntimeError(f"Счёт с id: {row_id} не найдена.")
 
     status = record.get("status")
-    if status == "Paid" or status == "Rejected":
-        raise RuntimeError("Счёт уже обработана")
+    if status == "Paid" or status == "Rejected" or status == "Approved":
+        raise RuntimeError("Счёт уже обработан")
 
-    if status == "Approved":
-        raise RuntimeError("Счёт уже подтвеждён!")
-    logger.info(status)
     approver_id = update.effective_chat.id
     department = await check_department(approver_id)
-    if department not in ("head", "finance"):
+    if department not in ("head", "finance", "payers"):
         raise PermissionError("Вы не можете менять статус счёта!")
 
     if department == "head" and status == "Pending":
