@@ -174,15 +174,18 @@ async def send_message_and_save_data(context: ContextTypes.DEFAULT_TYPE,
 
     message_ids = []
     actual_chat_ids = []
-    try:
-        for chat_id in chat_ids_list:
+    for chat_id in chat_ids_list:
+        try:
             message = await context.bot.send_message(
-                chat_id=chat_id, text=message_text, reply_markup=reply_markup
+                chat_id=chat_id,
+                text=message_text,
+                reply_markup=reply_markup
             )
             message_ids.append(message.message_id)
             actual_chat_ids.append(chat_id)
-    finally:
-        pass
+        except Exception as e:
+            pass
+
 
     context.bot_data[f"{row_id}_{department}"] = list(zip(actual_chat_ids, message_ids))
 

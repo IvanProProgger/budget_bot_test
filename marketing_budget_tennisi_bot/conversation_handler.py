@@ -73,9 +73,10 @@ async def input_sum(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     del context.user_data["enter_sum_message_id"]
     user_sum = update.message.text
     context.user_data["sum"] = user_sum
+    logger.info(f"Введена сумма {user_sum}")
+
     pattern = r"^[0-9]+(?:\.[0-9]+)?$"
     await update.message.from_user.delete_message(update.message.message_id)
-
     if not re.fullmatch(pattern, user_sum):
         await update.message.reply_text("Некорректная сумма. Попробуйте ещё раз.")
         bot_message = await update.message.reply_text(
@@ -127,7 +128,6 @@ async def input_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         context.user_data["partners"] = context.user_data["options"].get(selected_group)
         del context.user_data["options"]
         del context.user_data["groups"]
-
         await context.bot.send_message(
             context.user_data["chat_id"], f"Выбрана группа расхода: {selected_group}"
         )
@@ -137,15 +137,17 @@ async def input_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             logger.info(f"Выбран партнёр расхода: {selected_partner}")
             context.user_data["partner"] = selected_partner
             del context.user_data["partners"]
-
             await context.bot.send_message(
                 context.user_data["chat_id"], f"Выбран партнёр: {selected_partner}"
             )
 
-            await query.message.reply_text(
-                "Введите комментарий для отчёта:",
+            bot_message = await context.bot.send_message(
+                chat_id=context.user_data["chat_id"],
+                text="Введите комментарий для отчёта:",
                 reply_markup=ForceReply(selective=True),
             )
+            context.user_data["enter_comment_message_id"] = bot_message.message_id
+
             return INPUT_COMMENT
 
         reply_markup = await create_keyboard(context.user_data["partners"])
@@ -184,10 +186,13 @@ async def input_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
             context.user_data["chat_id"], f"Выбран партнёр: {selected_partner}"
         )
 
-        await query.message.reply_text(
-            "Введите комментарий для отчёта:",
+        bot_message = await context.bot.send_message(
+            chat_id=context.user_data["chat_id"],
+            text="Введите комментарий для отчёта:",
             reply_markup=ForceReply(selective=True),
         )
+        context.user_data["enter_comment_message_id"] = bot_message.message_id
+
         return INPUT_COMMENT
 
     reply_markup = await create_keyboard(context.user_data["partners"])
@@ -213,30 +218,29 @@ async def input_partner(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         reply_markup=ForceReply(selective=True),
     )
     context.user_data["enter_comment_message_id"] = bot_message.message_id
-    logger.info(context.user_data["enter_comment_message_id"])
+
     return INPUT_COMMENT
 
 
 async def input_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обработчик ввода комментария к счёту и создание цитирования для ввода дат"""
 
+    await context.bot.delete_message(context.user_data["chat_id"], context.user_data["enter_comment_message_id"])
+    del context.user_data["enter_comment_message_id"]
     user_comment = update.message.text
-    logger.info(context.user_data["enter_comment_message_id"])
+    context.user_data["comment"] = user_comment
+    logger.info(f"Введён комментарий {user_comment}")
+
     pattern = r"^\S.*"
+    await update.message.from_user.delete_message(update.message.message_id)
     if not re.fullmatch(pattern, user_comment):
-        await update.message.reply_text("Неверный формат дат. Попробуйте ещё раз.")
+        await update.message.reply_text("Недопустимый формат комментария. Попробуйте ещё раз.")
         bot_message = await update.message.reply_text(
-            "Введите сумму:",
+            "Введите комментарий:",
             reply_markup=ForceReply(selective=True),
         )
         context.user_data["enter_comment_message_id"] = bot_message.message_id
         return INPUT_COMMENT
-
-    del context.user_data["enter_comment_message_id"]
-    logger.info(f"Введён комментарий {user_comment}")
-    context.user_data["comment"] = user_comment
-
-    await update.message.from_user.delete_message(update.message.message_id)
 
     await update.message.reply_text(f"Введён комментарий: {user_comment}")
     bot_message = await context.bot.send_message(
@@ -252,14 +256,15 @@ async def input_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def input_dates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обработчик ввода дат начисления счёта и создание кнопок для выбора типа оплаты"""
 
-    # Удаляем сообщение от бота "Введите месяц и год начисления" и данные о нём
+    # удаляем сообщение от бота "Введите месяц и год начисления" и данные о нём
+    # получаем и проверяем сообщение пользователя на соответствие паттерну
 
     await context.bot.delete_message(context.user_data["chat_id"], context.user_data["enter_date_message_id"])
     del context.user_data["enter_date_message_id"]
-
-    # Получаем и проверяем сообщение пользователя на соответствие паттерну
-
     user_dates = update.message.text
+    context.user_data["dates"] = user_dates
+    logger.info("Введены даты")
+
     pattern = r"(\d{2}\.\d{2}\s*)+"
     match = re.search(pattern, user_dates)
     if not re.fullmatch(pattern, user_dates):
@@ -286,14 +291,11 @@ async def input_dates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         )
         return INPUT_DATES
 
-    # Проверка пройдена;
     # сохраняем сообщение пользователя;
     # бот пишет введённые даты в чат;
     # удаляем сообщение от пользователя с введёнными датами;
     # отправляем сообщение с клавиатурой о выборе типа оплаты
 
-    context.user_data["dates"] = user_dates
-    logger.info(f"Введены даты: {user_dates}")
     await update.message.reply_text(f"Введены даты: {user_dates}")
     await update.message.from_user.delete_message(update.message.message_id)
     reply_markup = await create_keyboard(payment_types)
@@ -308,8 +310,8 @@ async def input_payment_type(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     payment_type = payment_types[int(query.data)]
-    logger.info(f"Выбран тип счёта: {payment_type}")
-    await query.edit_message_text(f"Выбран тип счёта: {payment_type}")
+    await query.edit_message_text(f"Выбран тип оплаты: {payment_type}")
+    logger.info(f"Выбран тип оплаты: {payment_type}")
 
     final_command = (
         f"{context.user_data['sum']}; {context.user_data['item']}; "
