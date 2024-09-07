@@ -9,7 +9,7 @@ from telegram.ext import (
 
 from config.config import Config
 
-from budget_bot_test.conversation_handler import (
+from marketing_budget_tennisi_bot.conversation_handler import (
     enter_record,
     input_sum,
     input_item,
@@ -21,7 +21,7 @@ from budget_bot_test.conversation_handler import (
     confirm_command,
     stop_dialog,
 )
-from budget_bot_test.handlers import (
+from marketing_budget_tennisi_bot.handlers import (
     check_access,
     start_command,
     submit_record_command,

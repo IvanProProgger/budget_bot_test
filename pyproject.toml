@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "budget-bot-test"
+name = "marketing-budget-tennisi-bot"
 version = "0.1.0"
-description = ""
-authors = ["Ivan <ishelukhin@tennisi.it>"]
+description = 'Бот для валидации и добавление счетов в Google Sheet таблицу "Бюджет маркетинг RU внутренне пользование"'
+authors = ["Иван Шелухин <ishelukhin@tennisi.it>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]

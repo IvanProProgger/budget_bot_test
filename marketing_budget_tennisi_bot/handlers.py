@@ -6,7 +6,7 @@ from google.api_core.exceptions import NotFound
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
-from budget_bot_test.sheets import add_record_to_google_sheet
+from marketing_budget_tennisi_bot.sheets import add_record_to_google_sheet
 from config.config import Config
 from config.logging_config import logger
 from db import db
@@ -173,13 +173,18 @@ async def send_message_and_save_data(context: ContextTypes.DEFAULT_TYPE,
     """Отправка сообщения в выбранные телеграм-чаты."""
 
     message_ids = []
-    for chat_id in chat_ids_list:
-        message = await context.bot.send_message(
-            chat_id=chat_id, text=message_text, reply_markup=reply_markup
-        )
-        message_ids.append(message.message_id)
+    actual_chat_ids = []
+    try:
+        for chat_id in chat_ids_list:
+            message = await context.bot.send_message(
+                chat_id=chat_id, text=message_text, reply_markup=reply_markup
+            )
+            message_ids.append(message.message_id)
+            actual_chat_ids.append(chat_id)
+    finally:
+        pass
 
-    context.bot_data[f"{row_id}_{department}"] = list(zip(chat_ids_list, message_ids))
+    context.bot_data[f"{row_id}_{department}"] = list(zip(actual_chat_ids, message_ids))
 
 
 async def approval_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
