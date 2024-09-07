@@ -4,7 +4,7 @@ from datetime import datetime
 
 from google.api_core.exceptions import NotFound
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 
 from budget_bot_test.sheets import add_record_to_google_sheet
 from config.config import Config
@@ -122,7 +122,7 @@ async def submit_record_command(update: Update, context: ContextTypes.DEFAULT_TY
         "approvals_needed": 1 if float(match.group(1)) < 50000 else 2,
         "approvals_received": 0,
         "status": "Not processed",
-        "approved_by": None,
+        "approved_by": "",
         "initiator_id": initiator_chat_id
     }
 
@@ -267,12 +267,14 @@ async def approve_to_payment_dep(context: ContextTypes.DEFAULT_TYPE, update: Upd
     async with db:
         record = await db.get_row_by_id(row_id)
         approver_in_db = record.get("approved_by")
+        if approver_in_db:
+            approver = f"{approver_in_db}, {approver}"
         await db.update_row_by_id(
             row_id,
             {
                 "approvals_received": 2 if department == "finance" else 1,
                 "status": "Approved",
-                "approved_by": f"{approver_in_db}, {approver}",
+                "approved_by": f"{approver}",
             },
         )
         record = await db.get_row_by_id(row_id)
@@ -429,7 +431,7 @@ async def reject_record_command(update: Update, context: ContextTypes.DEFAULT_TY
         if not record:
             raise RuntimeError(f"Счёт с id: {row_id} не найден.")
 
-    if status == "Approved" or status == "Rejected" or status == "Paid":
+    if status in ("Approved", "Rejected", "Paid"):
         raise RuntimeError("Счёт уже обработан")
 
     await reject_record(context, update, row_id, approver, initiator_id, department)
@@ -454,7 +456,7 @@ async def approve_record_command(update: Update, context: ContextTypes.DEFAULT_T
             raise RuntimeError(f"Счёт с id: {row_id} не найдена.")
 
     status = record.get("status")
-    if status == "Paid" or status == "Rejected" or status == "Approved":
+    if status in ("Paid", "Rejected", "Approved"):
         raise RuntimeError("Счёт уже обработан")
 
     approver_id = update.effective_chat.id

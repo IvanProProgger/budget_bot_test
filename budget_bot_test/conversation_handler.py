@@ -4,6 +4,7 @@ from datetime import datetime
 from telegram import Update, ForceReply, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ConversationHandler, ContextTypes
 
+from config.config import Config
 from config.logging_config import logger
 from budget_bot_test.handlers import submit_record_command
 from budget_bot_test.sheets import GoogleSheetsManager
@@ -24,8 +25,8 @@ payment_types: list[str] = ["нал", "безнал", "крипта"]
 
 async def create_keyboard(massive: list[str]) -> InlineKeyboardMarkup:
     """Функция для создания клавиатуры. Каждый кнопка создаётся с новой строки."""
-    keyboard = []
 
+    keyboard = []
     for number, item in enumerate(massive):
         button = InlineKeyboardButton(item, callback_data=number)
         keyboard.append([button])
@@ -35,12 +36,16 @@ async def create_keyboard(massive: list[str]) -> InlineKeyboardMarkup:
 
 async def enter_record(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Начало диалога. Ввод суммы и получение данных о статьях, группах, партнёрах."""
+
+    context.user_data["chat_id"] = update.effective_chat.id
+    if context.user_data["chat_id"] not in Config.initiators_chat_ids:
+        raise PermissionError("Команда запрещена! Вы не находитесь в списке инициаторов.")
+
     manager = GoogleSheetsManager()
     await manager.initialize_google_sheets()
     options_dict, items = await manager.get_data()
-
-    context.user_data["chat_id"] = update.effective_chat.id
     context.user_data["options"], context.user_data["items"] = options_dict, items
+
 
     bot_message = await update.message.reply_text(
         "Введите сумму:",
@@ -53,6 +58,7 @@ async def enter_record(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 async def input_sum(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обработчик ввода суммы и выбор категории."""
+
     user_sum = update.message.text
     pattern = r"^[0-9]+(?:\.[0-9]+)?$"
 
@@ -85,6 +91,7 @@ async def input_sum(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def input_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обработчик выбора категории счёта."""
+
     query = update.callback_query
     selected_item = context.user_data["items"][int(query.data)]
     logger.info(f"Выбрана статья расхода: {selected_item}")
@@ -142,6 +149,7 @@ async def input_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def input_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обработчик выбора группы расходов."""
+
     query = update.callback_query
     selected_group = context.user_data["groups"][int(query.data)]
     logger.info(f"Выбрана группа расхода: {selected_group}")
@@ -176,6 +184,7 @@ async def input_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 async def input_partner(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обработчик выбора партнёра к группе расходов счёта и создание цитирования для ввода комментария"""
+
     query = update.callback_query
     selected_partner = context.user_data["partners"][int(query.data)]
     logger.info(f"Выбран партнёр расхода: {selected_partner}")
@@ -193,6 +202,7 @@ async def input_partner(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 async def input_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обработчик ввода комментария к счёту и создание цитирования для ввода дат"""
+
     user_comment = update.message.text
 
     pattern = r"^\S.*"
@@ -216,6 +226,7 @@ async def input_comment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
 async def input_dates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обработчик ввода дат начисления счёта и создание кнопок для выбора типа оплаты"""
+
     user_dates = update.message.text
 
     try:
@@ -251,6 +262,7 @@ async def input_dates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 async def input_payment_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обработчик выбора типа оплаты и создание итогового сообщения для подтверждения или отклонения счёта"""
+
     query = update.callback_query
     await query.answer()
     payment_type = payment_types[int(query.data)]
@@ -283,8 +295,9 @@ async def input_payment_type(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return CONFIRM_COMMAND
 
 
-async def confirm_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def confirm_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Обработчик подтверждения и отклонения итоговой команды."""
+
     query = update.callback_query
     await query.answer()
     await query.edit_message_reply_markup(reply_markup=None)
@@ -294,6 +307,8 @@ async def confirm_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         context.user_data.clear()
         logger.info(f"счёта подтверждён @{query.from_user.username}")
         await submit_record_command(update, context)
+        return ConversationHandler.END
+
 
     elif query.data == "Отмена":
         logger.info(f"счёта отменён @{query.from_user.username}")
