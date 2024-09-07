@@ -10,6 +10,10 @@ from google.oauth2.service_account import Credentials
 from config.config import Config
 from config.logging_config import logger
 
+text_format = {
+    "textFormat": {"fontFamily": "Lato"}
+}
+
 date_format = {  # паттерн для преобразования числа даты в необходимый формат
     "numberFormat": {"type": "DATE", "pattern": "dd.mm.yyyy"}
 }
@@ -102,6 +106,7 @@ class GoogleSheetsManager:
             ]
             await worksheet.append_row(row_data, value_input_option="USER_ENTERED")
             logger.info(f"Добавлена строка: {row_data}")
+        await worksheet.format("A:H", text_format)
         await worksheet.format("A3:A", date_format)
         await worksheet.format("B3:B", currency_format)
         await worksheet.format("G3:G", date_format)

@@ -550,5 +550,5 @@ async def error_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     except Exception as e:
         message_text = f"Ошибка при отправке уведомления об ошибке: {e}."
-        logger.error(message_text)
+        logger.error(message_text, exc_info=True)
         await context.bot.send_message(Config.developer_chat_id, message_text)
