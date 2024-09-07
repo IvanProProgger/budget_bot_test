@@ -309,7 +309,6 @@ async def confirm_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await submit_record_command(update, context)
         return ConversationHandler.END
 
-
     elif query.data == "Отмена":
         logger.info(f"счёта отменён @{query.from_user.username}")
         await stop_dialog(update, context)

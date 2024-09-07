@@ -228,6 +228,7 @@ async def approve_to_financial_dep(context: ContextTypes.DEFAULT_TYPE, update: U
     """
     Изменение количества апрувов и статуса платежа.
     Отправка сообщения о платеже свыше 50.000 в финансовый отдел на согласование платежа.
+    Изменение сообщения от бота в чатах участников департамента "head"
     """
 
     async with db:
@@ -260,8 +261,9 @@ async def approve_to_financial_dep(context: ContextTypes.DEFAULT_TYPE, update: U
 async def approve_to_payment_dep(context: ContextTypes.DEFAULT_TYPE, update: Update,
                                  row_id: str, approver: str, department: str) -> None:
     """
-    Изменение количество апрувов и статус платежа.
+    Изменение количество апрувов и статус платежа. При сумме более 50.000 апрувит "finance" иначе "head" департамент
     Отправка сообщения об одобрении платежа для отдела оплаты.
+    Изменение сообщения от бота в чатах участников департамента "head" или "finance"
     """
 
     async with db:
