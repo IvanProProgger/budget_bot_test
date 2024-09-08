@@ -4,7 +4,7 @@ from datetime import datetime
 
 from google.api_core.exceptions import NotFound
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, ConversationHandler
+from telegram.ext import ContextTypes
 
 from marketing_budget_tennisi_bot.sheets import add_record_to_google_sheet
 from config.config import Config
@@ -125,7 +125,6 @@ async def submit_record_command(update: Update, context: ContextTypes.DEFAULT_TY
         "approved_by": "",
         "initiator_id": initiator_chat_id
     }
-
     try:
         async with db:
             row_id = await db.insert_record(record_dict)

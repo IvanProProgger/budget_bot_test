@@ -1,10 +1,11 @@
-# Budget Bot
+# Marketing Budget Tennisi Bot
 
 Telegram бот для управления бюджетом.
 
 ## Описание
 
-Бот валидирует счета и добавляет расходы в Google Sheet таблицу "Бюджет маркетинг RU внутренне пользование"
+Бот отправляет запросы на валидацию счетов и добавляет расходы в
+Google Sheet таблицу "Бюджет маркетинг RU внутренне пользование"
 
 ## Команды
 
@@ -30,15 +31,13 @@ Telegram бот для управления бюджетом.
    INITIATORS_CHAT_IDS=chat_ids-инициаторов
    HEAD_CHAT_IDS=chat_id-главы-департамента
    FINANCE_CHAT_IDS=chat_ids-финансового-отдела
-   PAYERS_CHAT_IDS=chat_ids-плательщиком
+   PAYERS_CHAT_IDS=chat_ids-плательщиков
    DEVELOPER_CHAT_ID=chat_ids-разработчика
    WHITE_LIST=chat_ids-пользователей
 
-3. Соберите Docker-образ командой: `docker build -t marketing_budget_tennisi_bot .`
+3. Соберите Docker-образ командой: `docker-compose up -d`
 
-4. Запустите Docker-контейнер командой: `docker run marketing_budget_tennisi_bot`
-
-Отправьте боту команду /start через Telegram для начала взаимодействия.
+Отправьте боту(https://t.me/marketing_budget_tennisi_bot) команду /start через Telegram для начала взаимодействия.
 
 Copyright [2024] [Tennisi]. Все права защищены.
 
