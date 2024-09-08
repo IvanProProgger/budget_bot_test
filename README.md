@@ -47,7 +47,7 @@ Google Sheet таблицу "Бюджет маркетинг RU внутренн
     
     WHITE_LIST=chat_ids-пользователей
 
-3. Соберите Docker-образ командой: `docker-compose up -d`
+3. Запустите docker-контейнер командой: `docker-compose up -d`
 
 Отправьте боту(https://t.me/marketing_budget_tennisi_bot) команду /start через Telegram для начала взаимодействия.
 
